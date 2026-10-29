@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>短信</title>
+<style>
+*{box-sizing:border-box}
+:root{color-scheme:dark}
+body{margin:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit;border:0}
+button:disabled{opacity:.45;cursor:default}
+.phone{max-width:460px;height:100vh;height:100dvh;margin:0 auto;display:flex;flex-direction:column}
+.top{position:relative;flex:none;display:flex;justify-content:space-between;align-items:flex-start;padding:14px 16px 8px}
+.round{width:42px;height:42px;border-radius:50%;background:#242426;display:flex;place-items:center;justify-content:center;align-items:center}
+svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.back{font-size:29px}
+.profile{text-align:center}
+.avatar{width:59px;height:59px;margin:0 auto;border-radius:50%;background:linear-gradient(#aaa8bd,#39364f);display:grid;place-items:center}
+.avatar svg{width:42px;height:42px;fill:#fff;stroke:none}
+.number{font-size:14px;margin-top:7px;padding:6px 13px;background:#222225;border-radius:20px}
+.info{text-align:center;color:#85858d;font-size:11px;line-height:1.7;padding:4px 0 12px}
+.messages{flex:1;min-height:0;overflow:auto;padding:0 18px 16px;scrollbar-width:none}
+.messages::-webkit-scrollbar{display:none}
+.row{display:flex;margin:8px 0}
+.row.me{justify-content:flex-end}
+.bubble{max-width:79%;padding:8px 12px;border-radius:17px;background:#29292d;font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.me .bubble{background:#1688ed}
+.note{text-align:center;color:#929299;font-size:11px;padding:7px;line-height:1.6}
+.composer{display:flex;gap:9px;align-items:center;padding:9px 13px max(12px,env(safe-area-inset-bottom))}
+.add{width:37px;height:37px;border-radius:50%;font-size:27px;background:#242426;flex:none}
+.inputbox{flex:1;min-width:0;display:flex;align-items:center;border:1px solid #343438;border-radius:24px;padding:4px 4px 4px 15px}
+.inputbox input{flex:1;min-width:0;background:none;border:0;outline:0;color:#fff;font-size:15px}
+.send{width:31px;height:31px;border-radius:50%;background:#1688ed;font-size:24px}
+.overlay{display:none;position:fixed;inset:0;z-index:10;background:#000b;align-items:center;justify-content:center;padding:18px}
+.overlay.show{display:flex}
+.card{width:min(420px,100%);max-height:88dvh;overflow:auto;background:#202023;border:1px solid #343438;border-radius:19px;padding:19px}
+h2{font-size:19px;margin:0 0 16px}
+label{display:block;font-size:12px;color:#b6b6be;margin:13px 0 6px}
+.field{display:block;width:100%;min-width:0;border:1px solid #44444b;background:#2c2c31;color:#fff;padding:11px;border-radius:11px;font-size:15px}
+textarea.field{height:95px;resize:vertical}
+.actions{display:flex;gap:8px;margin-top:15px;flex-wrap:wrap}
+.btn{background:#1688ed;border-radius:11px;padding:11px 14px;font-size:14px}
+.gray{background:#39393f}
+.red{background:#d73e47}
+.menu .btn{display:block;width:100%;margin-top:10px;text-align:left}
+.hint{font-size:12px;color:#a3a3ad;line-height:1.6;overflow-wrap:anywhere}
+.status{color:#8dbfff}
+.call{text-align:center}
+.call .avatar{width:76px;height:76px;margin:12px auto 15px}
+.call h2{margin-bottom:7px}
+.subtitle{margin-top:18px;text-align:left;background:#151518;border-radius:15px;padding:14px;min-height:150px;max-height:40dvh;overflow:auto}
+.subtitle-label{font-size:11px;color:#8b8b96;margin:8px 0}
+.subtitle{font-size:15px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.call .actions{justify-content:center}
+.range{width:100%;accent-color:#1688ed}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="top">
+    <button class="round back" id="menuTop" aria-label="打开菜单">‹</button>
+    <div class="profile">
+      <div class="avatar"><svg viewBox="0 0 48 48"><circle cx="24" cy="16" r="9"/><path d="M7 43c0-10 34-10 34 0z"/></svg></div>
+      <div class="number">+86 139 9999 9999</div>
+    </div>
+    <button class="round" id="callBtn" aria-label="开始语音通话" title="语音通话"><svg viewBox="0 0 24 24"><path d="m15 10.6-4v12l-6-4z"/><path d="M6 3h3l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg></button>
+  </div>
+  <div class="info">iMessage信息<br><span id="date"></span></div>
+  <main class="messages" id="messages"></main>
+  <div class="note" id="chatStatus">点 ‹ 设置 API 后即可开始聊天</div>
+  <div class="composer">
+    <button class="add" id="menuBtn" aria-label="打开菜单">+</button>
+    <div class="inputbox">
+      <input id="text" placeholder="iMessage信息" autocomplete="off">
+      <button class="send" id="sendBtn" aria-label="发送">↑</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay menu" id="menu">
+  <div class="card">
+    <h2>API 设置与模型</h2>
+    <label>API 地址（Base URL）</label>
+    <input class="field" id="base" placeholder="https://api.example.com/v1" type="url">
+    <div class="hint">一般以 /v1 结尾。也支持粘贴完整的 /chat/completions 地址。</div>
+    <label>API Key</label>
+    <input class="field" id="key" type="password" autocomplete="off" placeholder="输入密钥">
+    <label>模型</label>
+    <input class="field" id="model" list="models" placeholder="输入服务商支持的模型 ID">
+    <datalist id="models"></datalist>
+    <div class="actions"><button class="btn gray" id="loadModels">读取模型列表</button></div>
+    <label>角色设定（System Prompt）</label>
+    <textarea class="field" id="system" placeholder="例如：你是我的朋友小雨，说话简短自然，像发短信一样。"></textarea>
+    <label>温度 <span id="tempVal">0.8</span></label>
+    <input class="range" id="temp" type="range" min="0" max="2" step=".1" value="0.8">
+    <label>最大回复 tokens</label>
+    <input class="field" id="maxTokens" type="number" min="1" step="1" placeholder="留空使用模型默认值">
+    <div class="actions">
+      <button class="btn" id="save">保存</button>
+    </div>
+    <button class="btn gray" id="menuCall">语音通话</button>
+    <button class="btn red" id="clear">清空聊天记录</button>
+    <button class="btn gray" id="closeMenu">关闭</button>
+  </div>
+</div>
+
+<div class="overlay call" id="call">
+  <div class="card">
+    <div class="avatar"><svg viewBox="0 0 48 48"><circle cx="24" cy="16" r="9"/><path d="M7 43c0-10 34-10 34 0z"/></svg></div>
+    <h2>+86 139 9999 9999</h2>
+    <div class="hint status" id="callStatus">正在呼叫…</div>
+    <div class="subtitle-label">对方说</div>
+    <div class="subtitle" id="subtitle"></div>
+    <div class="actions">
+      <button class="btn" id="talk">按住说话</button>
+      <button class="btn red" id="hangup">挂断</button>
+    </div>
+    <div class="hint" style="margin-top:12px">需要浏览器支持语音识别（Chrome/Safari）。不支持时可在下方打字。</div>
+    <input class="field" id="callText" placeholder="打字代替说话，回车发送" style="margin-top:10px">
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const S=JSON.parse(localStorage.getItem('im_settings')||'{}');
+let history=JSON.parse(localStorage.getIt
