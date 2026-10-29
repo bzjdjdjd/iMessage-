@@ -13,7 +13,7 @@ button{cursor:pointer;color:inherit;border:0}
 button:disabled{opacity:.45;cursor:default}
 .phone{max-width:460px;height:100vh;height:100dvh;margin:0 auto;display:flex;flex-direction:column}
 .top{position:relative;flex:none;display:flex;justify-content:space-between;align-items:flex-start;padding:14px 16px 8px}
-.round{width:42px;height:42px;border-radius:50%;background:#242426;display:flex;place-items:center;justify-content:center;align-items:center}
+.round{width:42px;height:42px;border-radius:50%;background:#242426;display:flex;justify-content:center;align-items:center}
 svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .back{font-size:29px}
 .profile{text-align:center}
@@ -45,14 +45,14 @@ textarea.field{height:95px;resize:vertical}
 .gray{background:#39393f}
 .red{background:#d73e47}
 .menu .btn{display:block;width:100%;margin-top:10px;text-align:left}
+.menu .actions .btn{width:auto;margin-top:0}
 .hint{font-size:12px;color:#a3a3ad;line-height:1.6;overflow-wrap:anywhere}
 .status{color:#8dbfff}
 .call{text-align:center}
 .call .avatar{width:76px;height:76px;margin:12px auto 15px}
 .call h2{margin-bottom:7px}
-.subtitle{margin-top:18px;text-align:left;background:#151518;border-radius:15px;padding:14px;min-height:150px;max-height:40dvh;overflow:auto}
 .subtitle-label{font-size:11px;color:#8b8b96;margin:8px 0}
-.subtitle{font-size:15px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.subtitle{margin-top:18px;text-align:left;background:#151518;border-radius:15px;padding:14px;min-height:150px;max-height:40dvh;overflow:auto;font-size:15px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .call .actions{justify-content:center}
 .range{width:100%;accent-color:#1688ed}
 </style>
@@ -65,7 +65,7 @@ textarea.field{height:95px;resize:vertical}
       <div class="avatar"><svg viewBox="0 0 48 48"><circle cx="24" cy="16" r="9"/><path d="M7 43c0-10 34-10 34 0z"/></svg></div>
       <div class="number">+86 139 9999 9999</div>
     </div>
-    <button class="round" id="callBtn" aria-label="开始语音通话" title="语音通话"><svg viewBox="0 0 24 24"><path d="m15 10.6-4v12l-6-4z"/><path d="M6 3h3l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg></button>
+    <button class="round" id="callBtn" aria-label="开始语音通话" title="语音通话"><svg viewBox="0 0 24 24"><path d="M6 3h3l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg></button>
   </div>
   <div class="info">iMessage信息<br><span id="date"></span></div>
   <main class="messages" id="messages"></main>
@@ -90,16 +90,18 @@ textarea.field{height:95px;resize:vertical}
     <label>模型</label>
     <input class="field" id="model" list="models" placeholder="输入服务商支持的模型 ID">
     <datalist id="models"></datalist>
-    <div class="actions"><button class="btn gray" id="loadModels">读取模型列表</button></div>
+    <div class="actions">
+      <button class="btn gray" id="loadModels">读取模型列表</button>
+      <button class="btn gray" id="testBtn">测试连接</button>
+    </div>
+    <div class="hint" id="testResult"></div>
     <label>角色设定（System Prompt）</label>
     <textarea class="field" id="system" placeholder="例如：你是我的朋友小雨，说话简短自然，像发短信一样。"></textarea>
     <label>温度 <span id="tempVal">0.8</span></label>
     <input class="range" id="temp" type="range" min="0" max="2" step=".1" value="0.8">
     <label>最大回复 tokens</label>
     <input class="field" id="maxTokens" type="number" min="1" step="1" placeholder="留空使用模型默认值">
-    <div class="actions">
-      <button class="btn" id="save">保存</button>
-    </div>
+    <button class="btn" id="save">保存</button>
     <button class="btn gray" id="menuCall">语音通话</button>
     <button class="btn red" id="clear">清空聊天记录</button>
     <button class="btn gray" id="closeMenu">关闭</button>
@@ -123,6 +125,6 @@ textarea.field{height:95px;resize:vertical}
 </div>
 
 <script>
-const $=id=>document.getElementById(id);
-const S=JSON.parse(localStorage.getItem('im_settings')||'{}');
-let history=JSON.parse(localStorage.getIt
+var $ = function(id){ return document.getElementById(id); };
+var S = {};
+var hist = [
