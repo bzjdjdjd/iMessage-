@@ -123,8 +123,262 @@ textarea.field{height:95px;resize:vertical}
     <input class="field" id="callText" placeholder="打字代替说话，回车发送" style="margin-top:10px">
   </div>
 </div>
-
 <script>
 var $ = function(id){ return document.getElementById(id); };
 var S = {};
-var hist = [
+var hist = [];
+var busy = false;
+
+try { S = JSON.parse(localStorage.getItem('im_settings') || '{}'); } catch(e) { S = {}; }
+try { hist = JSON.parse(localStorage.getItem('im_history') || '[]'); } catch(e) { hist = []; }
+
+(function(){
+  var d = new Date();
+  var hh = ('0' + d.getHours()).slice(-2);
+  var mm = ('0' + d.getMinutes()).slice(-2);
+  $('date').textContent = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日 ' + hh + ':' + mm;
+})();
+
+function loadSettings(){
+  $('base').value = S.base || '';
+  $('key').value = S.key || '';
+  $('model').value = S.model || '';
+  $('system').value = S.system || '';
+  $('temp').value = (S.temp === undefined || S.temp === null) ? 0.8 : S.temp;
+  $('tempVal').textContent = $('temp').value;
+  $('maxTokens').value = S.maxTokens || '';
+  $('testResult').textContent = '';
+  updateStatus();
+}
+function readForm(){
+  S.base = $('base').value.trim();
+  S.key = $('key').value.trim();
+  S.model = $('model').value.trim();
+  S.system = $('system').value.trim();
+  S.temp = parseFloat($('temp').value);
+  S.maxTokens = $('maxTokens').value ? parseInt($('maxTokens').value, 10) : '';
+}
+function saveSettings(){
+  readForm();
+  localStorage.setItem('im_settings', JSON.stringify(S));
+  updateStatus();
+  closeMenu();
+}
+function ready(){ return !!(S.base && S.key && S.model); }
+function updateStatus(){
+  $('chatStatus').textContent = ready() ? ('已连接 · ' + S.model) : '点 ‹ 设置 API 后即可开始聊天';
+}
+function chatUrl(){
+  var b = (S.base || '').replace(/\/+$/, '');
+  if (/\/chat\/completions$/.test(b)) return b;
+  return b + '/chat/completions';
+}
+function modelsUrl(){
+  var b = (S.base || '').replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
+  return b + '/models';
+}
+
+$('temp').oninput = function(){ $('tempVal').textContent = $('temp').value; };
+$('save').onclick = saveSettings;
+
+$('loadModels').onclick = function(){
+  readForm();
+  if (!S.base || !S.key) { alert('请先填写 API 地址和 Key'); return; }
+  var btn = $('loadModels');
+  btn.disabled = true; btn.textContent = '读取中…';
+  fetch(modelsUrl(), { headers: { 'Authorization': 'Bearer ' + S.key } })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      var arr = j.data || j.models || [];
+      var list = arr.map(function(m){ return m.id || m.name || m; }).filter(Boolean);
+      $('models').innerHTML = list.map(function(m){ return '<option value="' + esc(m) + '">'; }).join('');
+      if (!list.length) alert('没有读到模型，请手动输入模型 ID');
+      else alert('读取到 ' + list.length + ' 个模型，点模型输入框可选择');
+    })
+    .catch(function(e){ alert('读取失败：' + e.message); })
+    .then(function(){ btn.disabled = false; btn.textContent = '读取模型列表'; });
+};
+
+$('testBtn').onclick = function(){
+  readForm();
+  if (!ready()) { $('testResult').textContent = '请先填写 API 地址、Key 和模型'; return; }
+  $('testResult').textContent = '测试中…';
+  var body = { model: S.model, messages: [{ role: 'user', content: '说“你好”' }], max_tokens: 20 };
+  fetch(chatUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.key },
+    body: JSON.stringify(body)
+  })
+  .then(function(r){ return r.text().then(function(t){ return { ok: r.ok, status: r.status, text: t }; }); })
+  .then(function(res){
+    if (!res.ok) { $('testResult').textContent = '失败 ' + res.status + '：' + res.text.slice(0, 200); return; }
+    var j = JSON.parse(res.text);
+    var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    $('testResult').textContent = c ? ('连接成功，模型回复：' + c.trim()) : '连接成功但返回内容为空';
+  })
+  .catch(function(e){ $('testResult').textContent = '请求失败：' + e.message + '（可能是地址错误或服务商不允许浏览器直接调用）'; });
+};
+
+function openMenu(){ loadSettings(); $('menu').classList.add('show'); }
+function closeMenu(){ $('menu').classList.remove('show'); }
+$('menuTop').onclick = openMenu;
+$('menuBtn').onclick = openMenu;
+$('closeMenu').onclick = closeMenu;
+$('clear').onclick = function(){
+  if (!confirm('确定清空聊天记录？')) return;
+  hist = [];
+  localStorage.removeItem('im_history');
+  render();
+  closeMenu();
+};
+$('menuCall').onclick = function(){ closeMenu(); startCall(); };
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+function render(){
+  var box = $('messages');
+  box.innerHTML = hist.map(function(m){
+    return '<div class="row ' + (m.role === 'user' ? 'me' : '') + '"><div class="bubble">' + esc(m.content) + '</div></div>';
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+function saveHistory(){
+  localStorage.setItem('im_history', JSON.stringify(hist.slice(-100)));
+}
+
+function ask(){
+  var msgs = [];
+  if (S.system) msgs.push({ role: 'system', content: S.system });
+  msgs = msgs.concat(hist.slice(-30));
+  var body = { model: S.model, messages: msgs, temperature: (S.temp === undefined || S.temp === null || isNaN(S.temp)) ? 0.8 : S.temp };
+  if (S.maxTokens) body.max_tokens = S.maxTokens;
+  return fetch(chatUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.key },
+    body: JSON.stringify(body)
+  })
+  .then(function(r){ return r.text().then(function(t){ return { ok: r.ok, status: r.status, text: t }; }); })
+  .then(function(res){
+    if (!res.ok) {
+      var msg = res.text;
+      try { var j = JSON.parse(res.text); if (j.error && j.error.message) msg = j.error.message; } catch(e) {}
+      throw new Error(res.status + ' ' + msg.slice(0, 200));
+    }
+    var j2 = JSON.parse(res.text);
+    var c = j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
+    if (!c) throw new Error('返回内容为空');
+    return c.trim();
+  });
+}
+
+function send(){
+  var t = $('text').value.trim();
+  if (!t || busy) return;
+  if (!ready()) { openMenu(); return; }
+  $('text').value = '';
+  hist.push({ role: 'user', content: t });
+  render(); saveHistory();
+  busy = true; $('sendBtn').disabled = true;
+  $('chatStatus').textContent = '对方正在输入…';
+  ask().then(function(reply){
+    hist.push({ role: 'assistant', content: reply });
+    render(); saveHistory();
+    $('chatStatus').textContent = '已送达';
+  }).catch(function(e){
+    $('chatStatus').textContent = '发送失败：' + e.message;
+  }).then(function(){
+    busy = false; $('sendBtn').disabled = false;
+  });
+}
+$('sendBtn').onclick = send;
+$('text').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') { e.preventDefault(); send(); }
+});
+var rec = null, recognizing = false;
+var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function speak(text){
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = 'zh-CN'; u.rate = 1.05;
+  var voices = speechSynthesis.getVoices();
+  for (var i = 0; i < voices.length; i++) {
+    if (/zh/i.test(voices[i].lang)) { u.voice = voices[i]; break; }
+  }
+  speechSynthesis.speak(u);
+}
+
+function startCall(){
+  if (!ready()) { openMenu(); return; }
+  $('call').classList.add('show');
+  $('subtitle').textContent = '';
+  $('callStatus').textContent = '正在呼叫…';
+  setTimeout(function(){
+    $('callStatus').textContent = SR ? '通话中 · 按住按钮说话' : '通话中 · 此浏览器不支持语音，请打字';
+  }, 1200);
+  if (!SR) $('talk').disabled = true;
+}
+function endCall(){
+  $('call').classList.remove('show');
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  if (rec && recognizing) { try { rec.stop(); } catch(e) {} }
+}
+$('callBtn').onclick = startCall;
+$('hangup').onclick = endCall;
+
+function callSay(text){
+  text = text.trim();
+  if (!text || busy) return;
+  hist.push({ role: 'user', content: text });
+  saveHistory(); render();
+  busy = true;
+  $('callStatus').textContent = '对方正在思考…';
+  ask().then(function(reply){
+    hist.push({ role: 'assistant', content: reply });
+    saveHistory(); render();
+    $('subtitle').textContent = reply;
+    $('callStatus').textContent = '通话中 · 按住按钮说话';
+    speak(reply);
+  }).catch(function(e){
+    $('callStatus').textContent = '出错：' + e.message;
+  }).then(function(){ busy = false; });
+}
+
+$('callText').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') { e.preventDefault(); callSay($('callText').value); $('callText').value = ''; }
+});
+
+if (SR) {
+  rec = new SR();
+  rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false;
+  var finalText = '';
+  rec.onstart = function(){ recognizing = true; finalText = ''; $('callStatus').textContent = '正在听…'; };
+  rec.onresult = function(e){
+    var t = '';
+    for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+    finalText = t;
+    $('callStatus').textContent = '你说：' + t;
+  };
+  rec.onerror = function(e){ recognizing = false; $('callStatus').textContent = '识别失败：' + e.error; };
+  rec.onend = function(){
+    recognizing = false;
+    if (finalText) callSay(finalText);
+    else $('callStatus').textContent = '通话中 · 按住按钮说话';
+  };
+  var down = function(e){ e.preventDefault(); if (!recognizing) { if ('speechSynthesis' in window) speechSynthesis.cancel(); try { rec.start(); } catch(err) {} } };
+  var up = function(e){ e.preventDefault(); if (recognizing) { try { rec.stop(); } catch(err) {} } };
+  $('talk').addEventListener('pointerdown', down);
+  $('talk').addEventListener('pointerup', up);
+  $('talk').addEventListener('pointercancel', up);
+  $('talk').addEventListener('pointerleave', up);
+}
+
+loadSettings();
+render();
+</script>
+</body>
+</html>
